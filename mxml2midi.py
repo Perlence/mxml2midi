@@ -39,14 +39,14 @@ def handle_score(score):
         midipart.addTrackName(0, 0, trackname)
         midipart.name = trackname
         for channel, _ in enumerate(tuning):
-            midipart.addProgramChange(0, channel, 0, getint(part.find('*/midi-program')))
+            midipart.addProgramChange(0, channel, 0, getint(part.find('.//midi-program')))
         midipart.addTempo(0, 0, 120)
         handle_notes(midipart, actualpart, tuning)
         midiparts.append(midipart)
     return midiparts
 
 def handle_tuning(part):
-    strings = part.findall('***/staff-tuning')
+    strings = part.findall('.//staff-tuning')
     result = []
     for string in strings:
         step = string.find('tuning-step').text
