@@ -1,2 +1,4 @@
-- Per-measure processing
++ Per-measure processing
 - Multivoice tracks support
++ Tied notes
+- Grace notes

@@ -1,7 +1,7 @@
 from __future__ import division
 import pdb
 import re
-import xml.etree.ElementTree as ElementTree
+from lxml.etree import ElementTree, Element, XPath
 from midiutil.MidiFile import MIDIFile, Events
 
 def getpitch(note):
@@ -41,7 +41,7 @@ def handle_score(score):
         for channel, _ in enumerate(tuning):
             midipart.addProgramChange(0, channel, 0, getint(part.find('.//midi-program')))
         midipart.addTempo(0, 0, 120)
-        handle_notes(midipart, actualpart, tuning)
+        handle_measures(midipart, actualpart, tuning)
         midiparts.append(midipart)
     return midiparts
 
@@ -49,35 +49,57 @@ def handle_tuning(part):
     strings = part.findall('.//staff-tuning')
     result = []
     for string in strings:
-        step = string.find('tuning-step').text
-        octave = string.find('tuning-octave').text
-        note = getpitch(step + octave)
+        step = gettext(string.find('tuning-step'))
+        octave = gettext(string.find('tuning-octave'))
+        alter = getint(string.find('tuning-alter'))
+        note = getpitch(step + octave) + alter
         result.append(note)
     return result
 
-def handle_notes(midi, part, tuning):
+def handle_measures(midi, part, tuning):
     time = 0
-    notes = part.findall('*/note')
-    for note in notes:
-        if getint(note.find('voice')) == 1:
-            actualnotes = getint(note.find('time-modification/actual-notes'), default=1)
-            normalnotes = getint(note.find('time-modification/normal-notes'), default=1)
-            duration = (getduration(note.find('type').text) *
-                        normalnotes / actualnotes)
-            if note.find('dot') != None:
-                duration *= 1.5
-            if note.find('chord') != None:
-                time -= duration
-            if note.find('notations') != None:
-                dynamic = getdynamic(gettext(note.find('notations/dynamics/*'), 
-                                             src='tag', default='f'))
-                string = getint(note.find('notations/technical/string')) - 1
-                fret = getint(note.find('notations/technical/fret'))
-                pitch = tuning[string] + fret
-                midi.addNote(0, string, pitch, time, duration, dynamic)
-                time += duration
-            elif note.find('rest') != None:
-                time += duration
+    beats, beat_type = 4, 4
+    ties = Element('ties')
+    for measure in part.findall('measure'):
+        beats = getint(measure.find('attributes/time/beats'), default=beats)
+        beat_type = getint(measure.find('attributes/time/beat-type'), default=beat_type)
+        notes = measure.findall('note')
+        for note in notes:
+            if getint(note.find('voice')) == 1:
+                actualnotes = getint(note.find('time-modification/actual-notes'), default=1)
+                normalnotes = getint(note.find('time-modification/normal-notes'), default=1)
+                duration = (getduration(note.find('type').text) *
+                            normalnotes / actualnotes)
+                if note.find('dot') != None:
+                    duration *= 1.5
+                if note.find('chord') != None:
+                    time -= duration
+                if note.find('notations') != None:
+                    dynamic = getdynamic(gettext(note.find('notations/dynamics/*'), 
+                                                 src='tag', default='f'))
+                    string = getint(note.find('notations/technical/string')) - 1
+                    fret = getint(note.find('notations/technical/fret'))
+                    pitch = tuning[string] + fret
+                    if note.find('tie/[@type="start"]') != None:
+                        note.set('time', str(time))
+                        note.set('duration', str(duration))
+                        ties.append(note)
+                    elif note.find('tie/[@type="stop"]') != None:
+                        path = ('note[./notations/technical/string[string()="{}"] and ' +
+                                './notations/technical/fret[string()="{}"]]').format(string + 1, fret)
+                        path = XPath(path)
+                        for tie in path(ties):
+                            tietime = float(tie.get('time'))
+                            tieduration = float(tie.get('duration')) + duration
+                            midi.addNote(0, string, pitch, tietime, tieduration, dynamic)
+                            ties.remove(tie)
+                    else:
+                        midi.addNote(0, string, pitch, time, duration, dynamic)
+                    time += duration
+                elif note.find('rest') != None:
+                    time += duration
+        if len(notes) == 0:
+            time += beats / beat_type * 4
 
 def main():
     import sys
@@ -89,7 +111,7 @@ def main():
     parser.add_argument('--output', '-o', action='store', default=None)
     args = parser.parse_args()
     
-    document = ElementTree.parse(open(args.input))
+    document = ElementTree(file=open(args.input))
     if args.output:
         output = args.output
     else:
