@@ -89,10 +89,18 @@ def handle_measures(midi, part, tuning):
                                 './notations/technical/fret[string()="{}"]]').format(string + 1, fret)
                         path = XPath(path)
                         for tie in path(ties):
-                            tietime = float(tie.get('time'))
-                            tieduration = float(tie.get('duration')) + duration
-                            midi.addNote(0, string, pitch, tietime, tieduration, dynamic)
+                            tie_time = float(tie.get('time'))
+                            tie_duration = float(tie.get('duration')) + duration
+                            midi.addNote(0, string, pitch, tie_time, tie_duration, dynamic)
                             ties.remove(tie)
+                    elif note.find('grace') != None:
+                        steal_time_previous = note.find('grace').get('steal-time-previous')
+                        steal_time_previous = int(steal_time_previous.strip('%'))
+                        last_note = midi.tracks[0].eventList[-1]
+                        duration = last_note.duration * steal_time_previous / 100
+                        last_note.duration -= duration
+                        time = last_note.time + last_note.duration
+                        midi.addNote(0, string, pitch, time, duration, dynamic)
                     else:
                         midi.addNote(0, string, pitch, time, duration, dynamic)
                     time += duration
