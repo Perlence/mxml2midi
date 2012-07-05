@@ -68,8 +68,7 @@ def handle_measures(midi, part, tuning):
             if getint(note.find('voice')) == 1:
                 actualnotes = getint(note.find('time-modification/actual-notes'), default=1)
                 normalnotes = getint(note.find('time-modification/normal-notes'), default=1)
-                duration = (getduration(note.find('type').text) *
-                            normalnotes / actualnotes)
+                duration = (getduration(note.find('type').text) * normalnotes / actualnotes)
                 if note.find('dot') != None:
                     duration *= 1.5
                 if note.find('chord') != None:
@@ -80,19 +79,22 @@ def handle_measures(midi, part, tuning):
                     string = getint(note.find('notations/technical/string')) - 1
                     fret = getint(note.find('notations/technical/fret'))
                     pitch = tuning[string] + fret
-                    if note.find('tie/[@type="start"]') != None:
-                        note.set('time', str(time))
-                        note.set('duration', str(duration))
-                        ties.append(note)
-                    elif note.find('tie/[@type="stop"]') != None:
+                    if note.find('tie/[@type="stop"]') != None:
                         path = ('note[./notations/technical/string[string()="{}"] and ' +
                                 './notations/technical/fret[string()="{}"]]').format(string + 1, fret)
                         path = XPath(path)
                         for tie in path(ties):
                             tie_time = float(tie.get('time'))
                             tie_duration = float(tie.get('duration')) + duration
-                            midi.addNote(0, string, pitch, tie_time, tie_duration, dynamic)
-                            ties.remove(tie)
+                            if note.find('tie/[@type="start"]') != None:
+                                tie.set('duration', str(tie_duration))
+                            else:
+                                midi.addNote(0, string, pitch, tie_time, tie_duration, dynamic)
+                                ties.remove(tie)
+                    elif note.find('tie/[@type="start"]') != None:
+                        note.set('time', str(time))
+                        note.set('duration', str(duration))
+                        ties.append(note)
                     elif note.find('grace') != None:
                         steal_time_previous = note.find('grace').get('steal-time-previous')
                         steal_time_previous = int(steal_time_previous.strip('%'))
